@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phần mềm Quản lý Suất ăn</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        /* Custom scrollbar */
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 antialiased">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-white">Phần mềm Quản lý Suất ăn</h1>
+            <p class="text-gray-400 mt-2">Tải file, thêm suất ăn, xem thống kê và xuất dữ liệu dễ dàng.</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Cột điều khiển -->
+            <div class="md:col-span-1 space-y-6">
+                <!-- Bước 1: Tải File -->
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2 flex items-center">
+                        <span class="bg-indigo-500 text-white rounded-full h-8 w-8 flex items-center justify-center mr-3">1</span> Tải lên File Dữ liệu
+                    </h2>
+                    <p class="text-sm text-gray-400 mb-4">Chọn file <strong>.xlsx</strong> hoặc <strong>.csv</strong> từ máy chấm công của bạn.</p>
+                    <input type="file" id="dataFile" accept=".csv, .xlsx, .xls" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-colors duration-200">
+                </div>
+
+                <!-- Bước 2: Thêm suất ăn -->
+                <div id="addMealSection" class="bg-gray-800 p-6 rounded-lg shadow-lg opacity-50 pointer-events-none">
+                    <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2 flex items-center">
+                        <span class="bg-indigo-500 text-white rounded-full h-8 w-8 flex items-center justify-center mr-3">2</span> Thêm Suất Ăn Mới
+                    </h2>
+                    <div class="space-y-3">
+                        <div>
+                             <label for="employeeIdInput" class="text-sm text-gray-400 mb-1 block">Mã nhân viên</label>
+                             <input type="number" id="employeeIdInput" placeholder="Nhập Mã NV" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                        </div>
+                        <div>
+                             <label for="mealDateInput" class="text-sm text-gray-400 mb-1 block">Ngày ăn</label>
+                             <input type="date" id="mealDateInput" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                        </div>
+                        <button id="addMealButton" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 whitespace-nowrap">Thêm Suất Ăn</button>
+                    </div>
+                </div>
+
+                 <!-- Bước 3: Thao tác -->
+                 <div id="actionSection" class="bg-gray-800 p-6 rounded-lg shadow-lg opacity-50 pointer-events-none">
+                     <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2 flex items-center">
+                         <span class="bg-indigo-500 text-white rounded-full h-8 w-8 flex items-center justify-center mr-3">3</span> Thao Tác
+                     </h2>
+                     <div class="flex flex-col space-y-3">
+                         <button id="showStatsButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xem Toàn bộ Thống Kê</button>
+                         <button id="exportButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Toàn bộ Dữ liệu</button>
+                         <button id="exportStatsButton" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Thống Kê Tháng</button>
+                     </div>
+                 </div>
+            </div>
+
+            <!-- Cột hiển thị dữ liệu -->
+            <div class="md:col-span-2 bg-gray-800 p-6 rounded-lg shadow-lg">
+                <div id="dataView">
+                    <h2 class="text-xl font-semibold mb-4">Danh Sách Chấm Ăn (<span id="recordCount">0</span> bản ghi)</h2>
+                    <div class="table-container border border-gray-700 rounded-lg">
+                        <table class="w-full text-sm text-left text-gray-300">
+                            <thead class="text-xs text-gray-400 uppercase bg-gray-700 sticky top-0">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3">Tên nhân viên</th>
+                                    <th scope="col" class="px-4 py-3">Mã NV</th>
+                                    <th scope="col" class="px-4 py-3">Ngày ăn</th>
+                                    <th scope="col" class="px-4 py-3">Phòng Ban</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTableBody">
+                                <tr>
+                                    <td colspan="4" class="text-center py-10 text-gray-500">Vui lòng tải file Excel hoặc CSV để xem dữ liệu.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="statsView" class="hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">Thống Kê Suất Ăn</h2>
+                        <button id="backToDataButton" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Quay lại</button>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="font-semibold mb-2 text-lg">Theo Ngày</h3>
+                            <div id="dailyStats" class="table-container border border-gray-700 rounded-lg p-2"></div>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold mb-2 text-lg">Theo Tuần</h3>
+                            <div id="weeklyStats" class="table-container border border-gray-700 rounded-lg p-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast message -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg transition-transform translate-x-[200%] duration-300">
+        <p id="toast-message"></p>
+    </div>
+
+    <!-- Month selection modal -->
+    <div id="monthExportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
+            <h3 class="text-xl font-semibold mb-4">Chọn tháng để xuất thống kê</h3>
+            <p class="text-sm text-gray-400 mb-4">Dữ liệu thống kê theo ngày và tuần của tháng đã chọn sẽ được xuất ra file Excel.</p>
+            <input type="month" id="monthInput" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="cancelExport" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Hủy</button>
+                <button id="confirmExport" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Xác nhận & Xuất</button>
+            </div>
+        </div>
+    </div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const dataFileInput = document.getElementById('dataFile');
+    const employeeIdInput = document.getElementById('employeeIdInput');
+    const mealDateInput = document.getElementById('mealDateInput');
+    const addMealButton = document.getElementById('addMealButton');
+    const exportButton = document.getElementById('exportButton');
+    const showStatsButton = document.getElementById('showStatsButton');
+    const backToDataButton = document.getElementById('backToDataButton');
+    const exportStatsButton = document.getElementById('exportStatsButton');
+    
+    const monthExportModal = document.getElementById('monthExportModal');
+    const monthInput = document.getElementById('monthInput');
+    const cancelExport = document.getElementById('cancelExport');
+    const confirmExport = document.getElementById('confirmExport');
+
+    const addMealSection = document.getElementById('addMealSection');
+    const actionSection = document.getElementById('actionSection');
+
+    const dataView = document.getElementById('dataView');
+    const statsView = document.getElementById('statsView');
+
+    const dataTableBody = document.getElementById('dataTableBody');
+    const recordCountSpan = document.getElementById('recordCount');
+
+    let mealData = [];
+    let employeeMap = new Map();
+    const HEADERS = ['Tên nhân viên', 'Mã nhân viên', 'Ngày ăn', 'Phòng Ban'];
+
+    // Set default date for mealDateInput to today
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    mealDateInput.value = `${yyyy}-${mm}-${dd}`;
+
+
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        
+        toastMessage.textContent = message;
+        toast.className = `fixed bottom-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg transition-transform duration-300 ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+        
+        toast.classList.remove('translate-x-[200%]');
+        toast.classList.add('translate-x-0');
+
+        setTimeout(() => {
+            toast.classList.remove('translate-x-0');
+            toast.classList.add('translate-x-[200%]');
+        }, 3000);
+    }
+
+    function processData(dataRows) {
+        const records = dataRows.slice(4); // Skip header rows
+        
+        mealData = records.map(row => {
+            if (!row || !row[1]) return null;
+             // Manually map columns, skipping the 'Giờ ăn' column (index 3)
+            return {
+                'Tên nhân viên': row[0],
+                'Mã nhân viên': row[1],
+                'Ngày ăn': row[2],
+                'Phòng Ban': row[4]
+            };
+        }).filter(row => row !== null); // Filter out empty or invalid rows
+
+        buildEmployeeMap();
+        renderTable();
+        
+        addMealSection.classList.remove('opacity-50', 'pointer-events-none');
+        actionSection.classList.remove('opacity-50', 'pointer-events-none');
+        showToast('Tải file và xử lý thành công!', false);
+    }
+
+    dataFileInput.addEventListener('change', event => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        showToast('Đang xử lý file...');
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.csv')) {
+            Papa.parse(file, {
+                encoding: "UTF-8",
+                complete: results => processData(results.data),
+                error: error => showToast('Lỗi khi đọc file CSV: ' + error.message, true)
+            });
+        } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval:""});
+                    processData(jsonRows);
+                } catch (error) {
+                     showToast('Lỗi khi đọc file Excel: ' + error.message, true);
+                }
+            };
+            reader.onerror = error => showToast('Lỗi FileReader: ' + error.message, true);
+            reader.readAsArrayBuffer(file);
+        } else {
+            showToast('Định dạng file không được hỗ trợ.', true);
+        }
+    });
+
+    function buildEmployeeMap() {
+        employeeMap.clear();
+        mealData.forEach(row => {
+            const id = String(row['Mã nhân viên']).trim();
+            if (id && !employeeMap.has(id)) {
+                employeeMap.set(id, {
+                    name: row['Tên nhân viên'],
+                    department: row['Phòng Ban']
+                });
+            }
+        });
+    }
+
+    function renderTable() {
+        dataTableBody.innerHTML = '';
+        if(mealData.length === 0) {
+             dataTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-gray-500">Không có dữ liệu.</td></tr>';
+             recordCountSpan.textContent = 0;
+             return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        [...mealData].reverse().forEach(row => {
+            const tr = document.createElement('tr');
+            tr.className = 'bg-gray-800 border-b border-gray-700 hover:bg-gray-600';
+            tr.innerHTML = `
+                <td class="px-4 py-2 font-medium text-white whitespace-nowrap">${row['Tên nhân viên']}</td>
+                <td class="px-4 py-2">${row['Mã nhân viên']}</td>
+                <td class="px-4 py-2">${row['Ngày ăn']}</td>
+                <td class="px-4 py-2">${row['Phòng Ban']}</td>
+            `;
+            fragment.appendChild(tr);
+        });
+        dataTableBody.appendChild(fragment);
+        recordCountSpan.textContent = mealData.length;
+    }
+    
+    addMealButton.addEventListener('click', () => {
+        const id = employeeIdInput.value.trim();
+        if (!id) {
+            showToast('Vui lòng nhập Mã nhân viên.', true);
+            return;
+        }
+
+        if (!employeeMap.has(id)) {
+            showToast(`Không tìm thấy nhân viên với mã ${id}.`, true);
+            return;
+        }
+
+        const mealDateValue = mealDateInput.value;
+        let mealDate = mealDateValue ? new Date(mealDateValue) : new Date();
+        mealDate = new Date(mealDate.getTime() + mealDate.getTimezoneOffset() * 60000);
+        
+        const employeeInfo = employeeMap.get(id);
+        
+        const newEntry = {
+            'Tên nhân viên': employeeInfo.name,
+            'Mã nhân viên': id,
+            'Ngày ăn': `${mealDate.getMonth() + 1}/${mealDate.getDate()}/${mealDate.getFullYear()}`,
+            'Phòng Ban': employeeInfo.department,
+        };
+        
+        mealData.push(newEntry);
+        renderTable();
+        employeeIdInput.value = '';
+        showToast(`Đã thêm suất ăn cho ${employeeInfo.name}.`, false);
+    });
+
+    employeeIdInput.addEventListener('keypress', e => e.key === 'Enter' && addMealButton.click());
+
+    exportButton.addEventListener('click', () => {
+        if (mealData.length === 0) {
+            showToast('Không có dữ liệu để xuất.', true);
+            return;
+        }
+        showToast('Đang chuẩn bị file Excel...');
+        const worksheet = XLSX.utils.json_to_sheet(mealData, {header: HEADERS});
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "DanhSachChamAn");
+        XLSX.writeFile(workbook, `ToanBoChamCong_${new Date().toISOString().slice(0,10)}.xlsx`);
+    });
+
+    function renderStatsTable(containerId, data, headers) {
+        const container = document.getElementById(containerId);
+        if (!Object.keys(data).length) {
+            container.innerHTML = '<p class="text-gray-500">Không có dữ liệu.</p>';
+            return;
+        }
+        let tableHTML = `<table class="w-full text-sm text-left text-gray-300">
+            <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+                <tr><th class="px-4 py-2">${headers[0]}</th><th class="px-4 py-2">${headers[1]}</th></tr>
+            </thead><tbody>`;
+        
+        const sortedKeys = Object.keys(data).sort((a, b) => a > b ? -1 : 1);
+
+        for(const key of sortedKeys) {
+            tableHTML += `<tr class="border-b border-gray-700">
+                <td class="px-4 py-2">${key}</td>
+                <td class="px-4 py-2 font-bold">${data[key]}</td>
+            </tr>`;
+        }
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+    }
+
+    function getWeekNumber(d) {
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+        var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+        return `${d.getUTCFullYear()}-W${weekNo.toString().padStart(2, '0')}`;
+    }
+
+    function calculateStats(data) {
+        const dailyStats = {};
+        const weeklyStats = {};
+
+        data.forEach(row => {
+            const dateStr = row['Ngày ăn'];
+            if (!dateStr || typeof dateStr !== 'string') return;
+            
+            const dateParts = dateStr.split('/');
+            if (dateParts.length !== 3) return;
+
+            const dateObj = new Date(dateParts[2], dateParts[0] - 1, dateParts[1]);
+            if (isNaN(dateObj.getTime())) return;
+
+            const formattedDate = dateObj.toISOString().slice(0, 10);
+            dailyStats[formattedDate] = (dailyStats[formattedDate] || 0) + 1;
+            
+            const weekNumber = getWeekNumber(dateObj);
+            weeklyStats[weekNumber] = (weeklyStats[weekNumber] || 0) + 1;
+        });
+        return { dailyStats, weeklyStats };
+    }
+
+    showStatsButton.addEventListener('click', () => {
+        const { dailyStats, weeklyStats } = calculateStats(mealData);
+        renderStatsTable('dailyStats', dailyStats, ['Ngày', 'Số Suất']);
+        renderStatsTable('weeklyStats', weeklyStats, ['Tuần', 'Số Suất']);
+        dataView.classList.add('hidden');
+        statsView.classList.remove('hidden');
+    });
+
+    backToDataButton.addEventListener('click', () => {
+        statsView.classList.add('hidden');
+        dataView.classList.remove('hidden');
+    });
+
+    // --- New Export Logic ---
+    exportStatsButton.addEventListener('click', () => {
+        monthExportModal.classList.remove('hidden');
+    });
+
+    cancelExport.addEventListener('click', () => {
+        monthExportModal.classList.add('hidden');
+    });
+
+    confirmExport.addEventListener('click', () => {
+        const monthValue = monthInput.value; // e.g., "2025-09"
+        if (!monthValue) {
+            showToast('Vui lòng chọn tháng để xuất file.', true);
+            return;
+        }
+
+        const [year, month] = monthValue.split('-').map(Number);
+
+        const filteredData = mealData.filter(row => {
+            const dateStr = row['Ngày ăn'];
+            if (!dateStr || typeof dateStr !== 'string') return false;
+            const dateParts = dateStr.split('/');
+            if (dateParts.length !== 3) return false;
+            
+            const rowYear = parseInt(dateParts[2]);
+            const rowMonth = parseInt(dateParts[0]);
+            return rowYear === year && rowMonth === month;
+        });
+
+        if (filteredData.length === 0) {
+            showToast(`Không có dữ liệu suất ăn cho tháng ${month}-${year}.`, true);
+            return;
+        }
+
+        const { dailyStats, weeklyStats } = calculateStats(filteredData);
+        
+        const dailyDataForSheet = Object.entries(dailyStats)
+            .sort((a,b) => a[0] > b[0] ? -1 : 1)
+            .map(([date, count]) => ({ 'Ngày': date, 'Số Suất': count }));
+            
+        const weeklyDataForSheet = Object.entries(weeklyStats)
+            .sort((a,b) => a[0] > b[0] ? -1 : 1)
+            .map(([week, count]) => ({ 'Tuần': week, 'Số Suất': count }));
+
+        const wb = XLSX.utils.book_new();
+        const wsDaily = XLSX.utils.json_to_sheet(dailyDataForSheet);
+        const wsWeekly = XLSX.utils.json_to_sheet(weeklyDataForSheet);
+
+        XLSX.utils.book_append_sheet(wb, wsDaily, 'ThongKeTheoNgay');
+        XLSX.utils.book_append_sheet(wb, wsWeekly, 'ThongKeTheoTuan');
+
+        XLSX.writeFile(wb, `ThongKe_Thang_${month}-${year}.xlsx`);
+
+        monthExportModal.classList.add('hidden');
+        showToast('Đã xuất file thống kê thành công!', false);
+    });
+
+});
+</script>
+
+</body>
+</html>
+
