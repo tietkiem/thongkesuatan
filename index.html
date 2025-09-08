@@ -195,18 +195,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function processData(dataRows) {
-        const records = dataRows.slice(4); // Skip header rows
+        const records = dataRows.slice(4); // Skip header rows from file
         
         mealData = records.map(row => {
+            // Check for employee ID at the expected index 1.
             if (!row || !row[1]) return null;
-             // Manually map columns, skipping the 'Giờ ăn' column (index 3)
+            
+            // Corrected column indices based on user's error report.
+            // This assumes the file might have a leading column (like STT).
+            // Tên: row[0], Mã: row[1], Ngày: row[2], Giờ: row[3], Phòng: row[4]
+            // We need columns 0, 1, 2, 4 from the ORIGINAL file structure.
             return {
-                'Tên nhân viên': row[0],
-                'Mã nhân viên': row[1],
-                'Ngày ăn': row[2],
-                'Phòng Ban': row[4]
+                'Tên nhân viên': String(row[0] || '').trim(),
+                'Mã nhân viên': String(row[1] || '').trim(),
+                'Ngày ăn': String(row[2] || '').trim(),
+                'Phòng Ban': String(row[4] || '').trim() 
             };
-        }).filter(row => row !== null); // Filter out empty or invalid rows
+        }).filter(row => row && row['Mã nhân viên']); // Filter out invalid rows
 
         buildEmployeeMap();
         renderTable();
@@ -253,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function buildEmployeeMap() {
         employeeMap.clear();
         mealData.forEach(row => {
-            const id = String(row['Mã nhân viên']).trim();
+            const id = row['Mã nhân viên'];
             if (id && !employeeMap.has(id)) {
                 employeeMap.set(id, {
                     name: row['Tên nhân viên'],
@@ -299,16 +304,22 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const mealDateValue = mealDateInput.value;
-        let mealDate = mealDateValue ? new Date(mealDateValue) : new Date();
-        mealDate = new Date(mealDate.getTime() + mealDate.getTimezoneOffset() * 60000);
+        const mealDateValue = mealDateInput.value; // Format: YYYY-MM-DD
+        if (!mealDateValue) {
+            showToast('Vui lòng chọn ngày ăn.', true);
+            return;
+        }
         
+        // Convert YYYY-MM-DD string directly to M/D/YYYY to avoid timezone issues
+        const [year, month, day] = mealDateValue.split('-');
+        const formattedDate = `${parseInt(month)}/${parseInt(day)}/${year}`;
+
         const employeeInfo = employeeMap.get(id);
         
         const newEntry = {
             'Tên nhân viên': employeeInfo.name,
             'Mã nhân viên': id,
-            'Ngày ăn': `${mealDate.getMonth() + 1}/${mealDate.getDate()}/${mealDate.getFullYear()}`,
+            'Ngày ăn': formattedDate,
             'Phòng Ban': employeeInfo.department,
         };
         
