@@ -39,7 +39,7 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Cột điều khiển -->
-            <div class="md:col-span-1 space-y-6">
+            <div class="md-col-span-1 space-y-6">
                 <!-- Bước 1: Tải File -->
                 <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2 flex items-center">
@@ -195,23 +195,52 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function processData(dataRows) {
-        const records = dataRows.slice(4); // Skip header rows from file
+        let headerRowIndex = -1;
+        let headers = [];
+
+        // Find the header row by looking for 'Mã nhân viên'
+        for (let i = 0; i < dataRows.length && i < 10; i++) {
+            if (dataRows[i].includes('Mã nhân viên')) {
+                headerRowIndex = i;
+                headers = dataRows[i];
+                break;
+            }
+        }
+
+        if (headerRowIndex === -1) {
+            showToast('Không tìm thấy dòng tiêu đề trong file. Vui lòng kiểm tra lại file.', true);
+            return;
+        }
+
+        // Find the index of each required column based on its header name
+        const columnIndexMap = {
+            name: headers.indexOf('Tên nhân viên'),
+            id: headers.indexOf('Mã nhân viên'),
+            date: headers.indexOf('Ngày ăn'),
+            department: headers.indexOf('Phòng Ban')
+        };
+        
+        // Check if any required column is missing
+        for (const key in columnIndexMap) {
+            if (columnIndexMap[key] === -1) {
+                showToast(`Không tìm thấy cột "${headers[key]}" trong file.`, true);
+                return;
+            }
+        }
+        
+        const records = dataRows.slice(headerRowIndex + 1);
         
         mealData = records.map(row => {
-            // Check for employee ID at the expected index 1.
-            if (!row || !row[1]) return null;
+            const employeeId = row[columnIndexMap.id];
+            if (!employeeId) return null;
             
-            // Corrected column indices based on user's error report.
-            // This assumes the file might have a leading column (like STT).
-            // Tên: row[0], Mã: row[1], Ngày: row[2], Giờ: row[3], Phòng: row[4]
-            // We need columns 0, 1, 2, 4 from the ORIGINAL file structure.
             return {
-                'Tên nhân viên': String(row[0] || '').trim(),
-                'Mã nhân viên': String(row[1] || '').trim(),
-                'Ngày ăn': String(row[2] || '').trim(),
-                'Phòng Ban': String(row[4] || '').trim() 
+                'Tên nhân viên': String(row[columnIndexMap.name] || '').trim(),
+                'Mã nhân viên': String(employeeId).trim(),
+                'Ngày ăn': String(row[columnIndexMap.date] || '').trim(),
+                'Phòng Ban': String(row[columnIndexMap.department] || '').trim()
             };
-        }).filter(row => row && row['Mã nhân viên']); // Filter out invalid rows
+        }).filter(row => row && row['Mã nhân viên']);
 
         buildEmployeeMap();
         renderTable();
@@ -472,4 +501,3 @@ document.addEventListener('DOMContentLoaded', function () {
 
 </body>
 </html>
-
