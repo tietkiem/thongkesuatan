@@ -9,49 +9,66 @@
         body { font-family: sans-serif; padding: 2rem; background-color: #f0f2f5; }
         .container { max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #333; }
-        p { color: #555; }
-        button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        p { color: #555; line-height: 1.6; }
+        button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; transition: background-color 0.2s; }
         button:hover { background-color: #0056b3; }
-        #status { margin-top: 1rem; font-weight: bold; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed;}
+        #status { margin-top: 1rem; font-weight: bold; padding: 0.5rem; border-radius: 4px;}
+        .status-loading { color: #555; background-color: #e9ecef;}
+        .status-success { color: #155724; background-color: #d4edda;}
+        .status-error { color: #721c24; background-color: #f8d7da;}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Kiểm tra chức năng xuất file Word (.docx)</h1>
-        <p>Nhấn nút bên dưới để thử tạo một file Word đơn giản. Việc này giúp xác định xem thư viện có được tải đúng cách trong môi trường của bạn hay không.</p>
-        <button id="testButton">Tạo File Word Test</button>
-        <p id="status"></p>
+        <p>Tệp này dùng để chẩn đoán lỗi tải thư viện. Vui lòng quan sát thông báo trạng thái bên dưới.</p>
+        <button id="testButton" disabled>Đang tải thư viện...</button>
+        <p id="status" class="status-loading">Vui lòng chờ...</p>
     </div>
 
     <script>
-        document.getElementById('testButton').addEventListener('click', () => {
-            const statusEl = document.getElementById('status');
-            
-            // 1. Kiểm tra xem thư viện đã được tải chưa
-            if (typeof window.docx === 'undefined') {
-                statusEl.textContent = 'LỖI: Thư viện "docx" chưa được tải. Vui lòng kiểm tra kết nối mạng hoặc thử trên môi trường khác (như GitHub Pages).';
-                statusEl.style.color = 'red';
-                return;
+        const statusEl = document.getElementById('status');
+        const testButton = document.getElementById('testButton');
+
+        // Hàm kiểm tra thư viện
+        function checkLibrary() {
+            if (typeof window.docx !== 'undefined' && window.docx.Document) {
+                statusEl.textContent = 'Thành công: Thư viện "docx" đã tải xong. Bây giờ bạn có thể nhấn nút để tạo file Word.';
+                statusEl.className = 'status-success';
+                testButton.textContent = 'Tạo File Word Test';
+                testButton.disabled = false;
+                clearInterval(checkInterval); // Dừng kiểm tra
             }
+        }
+
+        // Bắt đầu kiểm tra định kỳ sau khi trang tải xong
+        const checkInterval = setInterval(checkLibrary, 200);
+
+        // Đặt thời gian chờ tối đa, nếu sau 10 giây không tải được thì báo lỗi
+        setTimeout(() => {
+            if (typeof window.docx === 'undefined') {
+                clearInterval(checkInterval);
+                statusEl.textContent = 'LỖI: Không thể tải thư viện "docx" sau 10 giây. Vui lòng kiểm tra kết nối mạng hoặc các tiện ích chặn quảng cáo trên trình duyệt và tải lại trang.';
+                statusEl.className = 'status-error';
+                testButton.textContent = 'Tải thư viện thất bại';
+            }
+        }, 10000);
+
+        testButton.addEventListener('click', () => {
+            statusEl.textContent = 'Đang tạo file...';
             
-            statusEl.textContent = 'Thư viện "docx" đã được tải thành công. Đang tạo file...';
-            statusEl.style.color = 'green';
-
             try {
-                // 2. Lấy các thành phần cần thiết từ thư viện
                 const { Document, Packer, Paragraph } = window.docx;
-
-                // 3. Tạo một tài liệu mới
                 const doc = new Document({
                     sections: [{
                         children: [
                             new Paragraph({ text: "Test thành công!" }),
-                            new Paragraph({ text: "Nếu bạn thấy file này, có nghĩa là thư viện docx hoạt động bình thường trong môi trường này." }),
+                            new Paragraph({ text: "Nếu bạn thấy file này, thư viện docx hoạt động bình thường trong môi trường này." }),
                         ],
                     }],
                 });
 
-                // 4. Tạo file và tải về
                 Packer.toBlob(doc).then(blob => {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement("a");
@@ -62,13 +79,15 @@
                     document.body.removeChild(a);
                     window.URL.revokeObjectURL(url);
                     statusEl.textContent = 'Đã tạo và tải file "test_file_word.docx" thành công!';
+                    statusEl.className = 'status-success';
                 });
 
             } catch (e) {
                 statusEl.textContent = 'Đã xảy ra lỗi trong quá trình tạo file: ' + e.message;
-                statusEl.style.color = 'red';
+                statusEl.className = 'status-error';
             }
         });
     </script>
 </body>
 </html>
+
