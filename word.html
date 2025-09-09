@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Xuất File Word</title>
+    <!-- Tải thư viện docx -->
+    <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; background-color: #f0f2f5; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        p { color: #555; }
+        button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+        #status { margin-top: 1rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kiểm tra chức năng xuất file Word (.docx)</h1>
+        <p>Nhấn nút bên dưới để thử tạo một file Word đơn giản. Việc này giúp xác định xem thư viện có được tải đúng cách trong môi trường của bạn hay không.</p>
+        <button id="testButton">Tạo File Word Test</button>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        document.getElementById('testButton').addEventListener('click', () => {
+            const statusEl = document.getElementById('status');
+            
+            // 1. Kiểm tra xem thư viện đã được tải chưa
+            if (typeof window.docx === 'undefined') {
+                statusEl.textContent = 'LỖI: Thư viện "docx" chưa được tải. Vui lòng kiểm tra kết nối mạng hoặc thử trên môi trường khác (như GitHub Pages).';
+                statusEl.style.color = 'red';
+                return;
+            }
+            
+            statusEl.textContent = 'Thư viện "docx" đã được tải thành công. Đang tạo file...';
+            statusEl.style.color = 'green';
+
+            try {
+                // 2. Lấy các thành phần cần thiết từ thư viện
+                const { Document, Packer, Paragraph } = window.docx;
+
+                // 3. Tạo một tài liệu mới
+                const doc = new Document({
+                    sections: [{
+                        children: [
+                            new Paragraph({ text: "Test thành công!" }),
+                            new Paragraph({ text: "Nếu bạn thấy file này, có nghĩa là thư viện docx hoạt động bình thường trong môi trường này." }),
+                        ],
+                    }],
+                });
+
+                // 4. Tạo file và tải về
+                Packer.toBlob(doc).then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "test_file_word.docx";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    statusEl.textContent = 'Đã tạo và tải file "test_file_word.docx" thành công!';
+                });
+
+            } catch (e) {
+                statusEl.textContent = 'Đã xảy ra lỗi trong quá trình tạo file: ' + e.message;
+                statusEl.style.color = 'red';
+            }
+        });
+    </script>
+</body>
+</html>
