@@ -5,14 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Phần mềm Quản lý Suất ăn</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            /* Times New Roman is used for docx export, pre-loading might help */
         }
         .table-container {
             max-height: 400px;
@@ -47,8 +45,8 @@
                     <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2 flex items-center">
                         <span class="bg-indigo-500 text-white rounded-full h-8 w-8 flex items-center justify-center mr-3">1</span> Tải lên File Dữ liệu
                     </h2>
-                    <p class="text-sm text-gray-400 mb-4">Chọn file <strong>.xlsx</strong> hoặc <strong>.csv</strong> từ máy chấm công của bạn.</p>
-                    <input type="file" id="dataFile" accept=".csv, .xlsx, .xls" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-colors duration-200">
+                    <p class="text-sm text-gray-400 mb-4">Chọn file <strong>.xlsx</strong> từ máy chấm công của bạn.</p>
+                    <input type="file" id="dataFile" accept=".xlsx, .xls" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-colors duration-200">
                 </div>
 
                 <!-- Bước 2: Thêm suất ăn -->
@@ -100,7 +98,7 @@
                             </thead>
                             <tbody id="dataTableBody">
                                 <tr>
-                                    <td colspan="5" class="text-center py-10 text-gray-500">Vui lòng tải file Excel hoặc CSV để xem dữ liệu.</td>
+                                    <td colspan="5" class="text-center py-10 text-gray-500">Vui lòng tải file Excel để xem dữ liệu.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -176,7 +174,6 @@ document.addEventListener('DOMContentLoaded', function () {
     let currentExportType = '';
     const HEADERS = ['Tên nhân viên', 'Mã nhân viên', 'Thứ', 'Ngày ăn', 'Phòng Ban'];
     
-    // Set default date for mealDateInput to today
     const today = new Date();
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -200,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let headerRowIndex = -1;
         let headers = [];
         for (let i = 0; i < dataRows.length && i < 10; i++) {
-            if (dataRows[i].includes('Mã nhân viên')) {
+            if (dataRows[i] && dataRows[i].includes('Mã nhân viên')) {
                 headerRowIndex = i;
                 headers = dataRows[i].map(h => String(h || '').trim());
                 break;
@@ -208,8 +205,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (headerRowIndex === -1) {
-            showToast('Không tìm thấy dòng tiêu đề trong file.', true);
-            return;
+            showToast('Không tìm thấy dòng tiêu đề trong file.', true); return;
         }
 
         const columnIndexMap = {
@@ -223,7 +219,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const requiredColumns = ['name', 'id', 'date', 'department'];
         for (const key of requiredColumns) {
             if (columnIndexMap[key] === -1) {
-                showToast(`Lỗi: Không tìm thấy cột "${HEADERS[requiredColumns.indexOf(key)]}" trong file.`, true);
+                const headerName = HEADERS[requiredColumns.indexOf(key)];
+                showToast(`Lỗi: Không tìm thấy cột "${headerName}" trong file.`, true);
                 return;
             }
         }
@@ -259,9 +256,10 @@ document.addEventListener('DOMContentLoaded', function () {
         reader.onload = (e) => {
             try {
                 const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array', cellDates:true});
+                const workbook = XLSX.read(data, {type: 'array'});
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
+                // Use raw: false to get formatted strings like "5/13/2025"
                 const jsonRows = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval:"", raw: false});
                 processData(jsonRows);
             } catch (error) {
@@ -285,9 +283,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     
-    function getVietnameseDayOfWeek(date) {
+    function getVietnameseDayOfWeek(date, useUTC = false) {
         const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-        return days[date.getDay()];
+        const dayIndex = useUTC ? date.getUTCDay() : date.getDay();
+        return days[dayIndex];
     }
 
     function renderTable() {
@@ -317,29 +316,20 @@ document.addEventListener('DOMContentLoaded', function () {
     
     addMealButton.addEventListener('click', () => {
         const id = employeeIdInput.value.trim();
-        if (!id) {
-            showToast('Vui lòng nhập Mã nhân viên.', true);
-            return;
-        }
-        if (!employeeMap.has(id)) {
-            showToast(`Không tìm thấy nhân viên với mã ${id}.`, true);
-            return;
-        }
+        if (!id) { showToast('Vui lòng nhập Mã nhân viên.', true); return; }
+        if (!employeeMap.has(id)) { showToast(`Không tìm thấy nhân viên với mã ${id}.`, true); return; }
+        
         const mealDateValue = mealDateInput.value;
-        if (!mealDateValue) {
-            showToast('Vui lòng chọn ngày ăn.', true);
-            return;
-        }
+        if (!mealDateValue) { showToast('Vui lòng chọn ngày ăn.', true); return; }
+        
         const [year, month, day] = mealDateValue.split('-');
         const formattedDate = `${parseInt(month)}/${parseInt(day)}/${year}`;
-        const dateObj = new Date(mealDateValue);
+        const dateObj = new Date(year, month - 1, day);
 
         const employeeInfo = employeeMap.get(id);
         const newEntry = {
-            'Tên nhân viên': employeeInfo.name,
-            'Mã nhân viên': id,
-            'Ngày ăn': formattedDate,
-            'Phòng Ban': employeeInfo.department,
+            'Tên nhân viên': employeeInfo.name, 'Mã nhân viên': id,
+            'Ngày ăn': formattedDate, 'Phòng Ban': employeeInfo.department,
             'Thứ': getVietnameseDayOfWeek(dateObj)
         };
         mealData.push(newEntry);
@@ -351,16 +341,11 @@ document.addEventListener('DOMContentLoaded', function () {
     employeeIdInput.addEventListener('keypress', e => e.key === 'Enter' && addMealButton.click());
 
     exportButton.addEventListener('click', () => {
-        if (mealData.length === 0) {
-            showToast('Không có dữ liệu để xuất.', true); return;
-        }
+        if (mealData.length === 0) { showToast('Không có dữ liệu để xuất.', true); return; }
         showToast('Đang chuẩn bị file Excel...');
         const dataToExport = mealData.map(row => ({
-            'Tên nhân viên': row['Tên nhân viên'],
-            'Mã nhân viên': row['Mã nhân viên'],
-            'Thứ': row['Thứ'],
-            'Ngày ăn': row['Ngày ăn'],
-            'Phòng Ban': row['Phòng Ban']
+            'Tên nhân viên': row['Tên nhân viên'], 'Mã nhân viên': row['Mã nhân viên'],
+            'Thứ': row['Thứ'], 'Ngày ăn': row['Ngày ăn'], 'Phòng Ban': row['Phòng Ban']
         }));
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
@@ -369,13 +354,12 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function getStartAndEndDateOfWeek(year, week) {
-        const d = new Date(year, 0, 1 + (week - 1) * 7);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(d.setDate(diff));
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        const format = (dt) => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
+        const d = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+        d.setUTCDate(d.getUTCDate() - d.getUTCDay() + 1);
+        const monday = new Date(d);
+        const sunday = new Date(d);
+        sunday.setUTCDate(d.getUTCDate() + 6);
+        const format = (dt) => `${String(dt.getUTCDate()).padStart(2,'0')}/${String(dt.getUTCMonth()+1).padStart(2,'0')}`;
         return `${format(monday)} - ${format(sunday)}`;
     }
 
@@ -386,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         let tableHTML = `<table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2">${headers[0]}</th><th class="px-4 py-2">${headers[1]}</th></tr></thead><tbody>`;
-        const sortedKeys = Object.keys(data).sort((a, b) => a > b ? -1 : 1);
+        const sortedKeys = Object.keys(data).sort((a, b) => a.localeCompare(b));
 
         for(const key of sortedKeys) {
             let displayKey = key;
@@ -402,18 +386,18 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function getWeekNumber(d) {
-        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-        var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-        var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
-        return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+        const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay()||7));
+        const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+        const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1)/7);
+        return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
     }
 
     function parseDate(dateStr) {
         if (!dateStr || typeof dateStr !== 'string') return null;
         const parts = dateStr.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
         if (!parts) return null;
-        // Assuming M/D/YYYY
+        // M/D/YYYY from Excel string
         const dateObj = new Date(parts[3], parts[1] - 1, parts[2]);
         return isNaN(dateObj.getTime()) ? null : dateObj;
     }
@@ -424,7 +408,12 @@ document.addEventListener('DOMContentLoaded', function () {
         data.forEach(row => {
             const dateObj = parseDate(row['Ngày ăn']);
             if (!dateObj) return;
-            const formattedDate = dateObj.toISOString().slice(0, 10);
+
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+
             dailyStats[formattedDate] = (dailyStats[formattedDate] || 0) + 1;
             const weekNumber = getWeekNumber(dateObj);
             weeklyStats[weekNumber] = (weeklyStats[weekNumber] || 0) + 1;
@@ -463,10 +452,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     confirmExport.addEventListener('click', () => {
         const monthValue = monthInput.value;
-        if (!monthValue) {
-            showToast('Vui lòng chọn tháng để xuất file.', true);
-            return;
-        }
+        if (!monthValue) { showToast('Vui lòng chọn tháng để xuất file.', true); return; }
+        
         const [year, month] = monthValue.split('-').map(Number);
         const filteredData = mealData.filter(row => {
             const dateObj = parseDate(row['Ngày ăn']);
@@ -474,8 +461,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         if (filteredData.length === 0) {
-            showToast(`Không có dữ liệu suất ăn cho tháng ${month}-${year}.`, true);
-            return;
+            showToast(`Không có dữ liệu suất ăn cho tháng ${month}-${year}.`, true); return;
         }
 
         if (currentExportType === 'excel') {
@@ -488,8 +474,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function exportStatsToExcel(filteredData, year, month) {
         const { dailyStats, weeklyStats } = calculateStats(filteredData);
-        const dailyDataForSheet = Object.entries(dailyStats).sort((a,b) => a[0] > b[0] ? -1 : 1).map(([date, count]) => ({ 'Ngày': date, 'Số Suất': count }));
-        const weeklyDataForSheet = Object.entries(weeklyStats).sort((a,b) => a[0] > b[0] ? -1 : 1).map(([week, count]) => ({ 'Tuần': week, 'Số Suất': count }));
+        const dailyDataForSheet = Object.entries(dailyStats).sort((a,b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ 'Ngày': date, 'Số Suất': count }));
+        const weeklyDataForSheet = Object.entries(weeklyStats).sort((a,b) => a[0].localeCompare(b[0])).map(([week, count]) => ({ 'Tuần': week, 'Số Suất': count }));
         const wb = XLSX.utils.book_new();
         const wsDaily = XLSX.utils.json_to_sheet(dailyDataForSheet);
         const wsWeekly = XLSX.utils.json_to_sheet(weeklyDataForSheet);
@@ -500,15 +486,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function exportStatsToDocx(filteredData, year, month) {
-        if (typeof window.docx === 'undefined' || !window.docx) {
-            showToast('Lỗi: Thư viện xuất Word chưa sẵn sàng. Vui lòng kiểm tra mạng và thử lại.', true);
+        if (typeof window.docx === 'undefined') {
+            showToast('Lỗi: Thư viện xuất Word chưa sẵn sàng. Hãy thử tải lại trang hoặc đảm bảo kết nối mạng ổn định.', true);
             return;
         }
         const { Document, Packer, Paragraph, Table, TableCell, TableRow, AlignmentType, WidthType, TableBorders } = window.docx;
 
         const { dailyStats } = calculateStats(filteredData);
         
-        const sortedDays = Object.keys(dailyStats).sort();
+        const sortedDays = Object.keys(dailyStats).sort((a, b) => a.localeCompare(b));
+        if (sortedDays.length === 0) {
+            showToast('Không có dữ liệu thống kê theo ngày để xuất.', true);
+            return;
+        }
         const firstDay = sortedDays[0];
         const lastDay = sortedDays[sortedDays.length - 1];
 
@@ -518,12 +508,11 @@ document.addEventListener('DOMContentLoaded', function () {
         };
         
         const tableRows = sortedDays.map((dateStr, index) => {
-            const dateObj = new Date(dateStr);
-            const utcDate = new Date(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate());
+            const dateObj = new Date(dateStr + 'T12:00:00Z'); // Use noon UTC to be timezone-safe
             return new TableRow({
                 children: [
                     new TableCell({ children: [new Paragraph({ text: `${index + 1}`, alignment: AlignmentType.CENTER })] }),
-                    new TableCell({ children: [new Paragraph(getVietnameseDayOfWeek(utcDate))] }),
+                    new TableCell({ children: [new Paragraph(getVietnameseDayOfWeek(dateObj, true))] }), // use UTC day
                     new TableCell({ children: [new Paragraph(formatDateVN(dateStr))] }),
                     new TableCell({ children: [new Paragraph({ text: `${dailyStats[dateStr]}`, alignment: AlignmentType.CENTER })] }),
                 ],
@@ -533,50 +522,32 @@ document.addEventListener('DOMContentLoaded', function () {
         const totalMeals = Object.values(dailyStats).reduce((sum, count) => sum + count, 0);
         tableRows.push(new TableRow({
             children: [
-                new TableCell({
-                    columnSpan: 3,
-                    children: [new Paragraph({ text: "Tổng cộng", style: "strong" })],
-                }),
-                new TableCell({
-                    children: [new Paragraph({ text: `${totalMeals}`, alignment: AlignmentType.CENTER, style: "strong" })],
-                }),
+                new TableCell({ columnSpan: 3, children: [new Paragraph({ text: "Tổng cộng", style: "strong" })] }),
+                new TableCell({ children: [new Paragraph({ text: `${totalMeals}`, alignment: AlignmentType.CENTER, style: "strong" })] }),
             ],
         }));
 
         const doc = new Document({
             styles: {
                 paragraphStyles: [{
-                    id: "strong",
-                    name: "Strong",
-                    basedOn: "Normal",
-                    next: "Normal",
+                    id: "strong", name: "Strong", basedOn: "Normal", next: "Normal",
                     run: { bold: true, font: "Times New Roman", size: 26 }, // 13pt = 26 half-points
                 }],
             },
             sections: [{
                 children: [
                     new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        columnWidths: [45, 55],
-                        borders: TableBorders.NONE,
-                        rows: [
-                            new TableRow({
-                                children: [
-                                    new TableCell({
-                                        children: [
-                                            new Paragraph({ text: "HỌC VIỆN CẢNH SÁT NHÂN DÂN", alignment: AlignmentType.CENTER, style: "strong" }),
-                                            new Paragraph({ text: "VĂN PHÒNG HỌC VIỆN", alignment: AlignmentType.CENTER, style: "strong" }),
-                                        ],
-                                    }),
-                                    new TableCell({
-                                        children: [
-                                            new Paragraph({ text: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", alignment: AlignmentType.CENTER, style: "strong" }),
-                                            new Paragraph({ text: "Độc lập - Tự do - Hạnh phúc", alignment: AlignmentType.CENTER, style: "strong" }),
-                                        ],
-                                    }),
-                                ],
-                            }),
-                        ],
+                        width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [45, 55], borders: TableBorders.NONE,
+                        rows: [ new TableRow({ children: [
+                            new TableCell({ children: [
+                                new Paragraph({ text: "HỌC VIỆN CẢNH SÁT NHÂN DÂN", alignment: AlignmentType.CENTER, style: "strong" }),
+                                new Paragraph({ text: "VĂN PHÒNG HỌC VIỆN", alignment: AlignmentType.CENTER, style: "strong" }),
+                            ]}),
+                            new TableCell({ children: [
+                                new Paragraph({ text: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", alignment: AlignmentType.CENTER, style: "strong" }),
+                                new Paragraph({ text: "Độc lập - Tự do - Hạnh phúc", alignment: AlignmentType.CENTER, style: "strong" }),
+                            ]}),
+                        ]}),],
                     }),
                     new Paragraph({ text: "" }),
                     new Paragraph({ text: "PHIẾU XÁC NHẬN", alignment: AlignmentType.CENTER, style: "strong" }),
@@ -588,14 +559,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     new Table({
                         width: { size: 100, type: WidthType.PERCENTAGE },
                         rows: [
-                             new TableRow({
-                                children: [
-                                    new TableCell({ children: [new Paragraph({ text: "STT", style: "strong", alignment: AlignmentType.CENTER })] }),
-                                    new TableCell({ children: [new Paragraph({ text: "Thứ", style: "strong", alignment: AlignmentType.CENTER })] }),
-                                    new TableCell({ children: [new Paragraph({ text: "Ngày tháng", style: "strong", alignment: AlignmentType.CENTER })] }),
-                                    new TableCell({ children: [new Paragraph({ text: "Số lượng suất ăn", style: "strong", alignment: AlignmentType.CENTER })] }),
-                                ],
-                            }),
+                             new TableRow({ children: [
+                                new TableCell({ children: [new Paragraph({ text: "STT", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                new TableCell({ children: [new Paragraph({ text: "Thứ", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                new TableCell({ children: [new Paragraph({ text: "Ngày tháng", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                new TableCell({ children: [new Paragraph({ text: "Số lượng suất ăn", style: "strong", alignment: AlignmentType.CENTER })] }),
+                             ]}),
                             ...tableRows
                         ],
                     }),
