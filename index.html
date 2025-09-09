@@ -7,10 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            /* Times New Roman is used for docx export, pre-loading might help */
         }
         .table-container {
             max-height: 400px;
@@ -74,8 +76,9 @@
                      </h2>
                      <div class="flex flex-col space-y-3">
                          <button id="showStatsButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xem Toàn bộ Thống Kê</button>
-                         <button id="exportButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Toàn bộ Dữ liệu</button>
-                         <button id="exportStatsButton" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Thống Kê Tháng</button>
+                         <button id="exportButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Toàn bộ Dữ liệu (Excel)</button>
+                         <button id="exportStatsButton" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Thống Kê Tháng (Excel)</button>
+                         <button id="exportDocxButton" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-md transition duration-200">Xuất Báo Cáo Tháng (Word)</button>
                      </div>
                  </div>
             </div>
@@ -90,13 +93,14 @@
                                 <tr>
                                     <th scope="col" class="px-4 py-3">Tên nhân viên</th>
                                     <th scope="col" class="px-4 py-3">Mã NV</th>
+                                    <th scope="col" class="px-4 py-3">Thứ</th>
                                     <th scope="col" class="px-4 py-3">Ngày ăn</th>
                                     <th scope="col" class="px-4 py-3">Phòng Ban</th>
                                 </tr>
                             </thead>
                             <tbody id="dataTableBody">
                                 <tr>
-                                    <td colspan="4" class="text-center py-10 text-gray-500">Vui lòng tải file Excel hoặc CSV để xem dữ liệu.</td>
+                                    <td colspan="5" class="text-center py-10 text-gray-500">Vui lòng tải file Excel hoặc CSV để xem dữ liệu.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -130,8 +134,8 @@
     <!-- Month selection modal -->
     <div id="monthExportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
-            <h3 class="text-xl font-semibold mb-4">Chọn tháng để xuất thống kê</h3>
-            <p class="text-sm text-gray-400 mb-4">Dữ liệu thống kê theo ngày và tuần của tháng đã chọn sẽ được xuất ra file Excel.</p>
+            <h3 id="modalTitle" class="text-xl font-semibold mb-4">Chọn tháng để xuất</h3>
+            <p id="modalDescription" class="text-sm text-gray-400 mb-4"></p>
             <input type="month" id="monthInput" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
             <div class="mt-6 flex justify-end space-x-3">
                 <button id="cancelExport" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Hủy</button>
@@ -151,25 +155,27 @@ document.addEventListener('DOMContentLoaded', function () {
     const showStatsButton = document.getElementById('showStatsButton');
     const backToDataButton = document.getElementById('backToDataButton');
     const exportStatsButton = document.getElementById('exportStatsButton');
+    const exportDocxButton = document.getElementById('exportDocxButton');
     
     const monthExportModal = document.getElementById('monthExportModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDescription = document.getElementById('modalDescription');
     const monthInput = document.getElementById('monthInput');
     const cancelExport = document.getElementById('cancelExport');
     const confirmExport = document.getElementById('confirmExport');
 
     const addMealSection = document.getElementById('addMealSection');
     const actionSection = document.getElementById('actionSection');
-
     const dataView = document.getElementById('dataView');
     const statsView = document.getElementById('statsView');
-
     const dataTableBody = document.getElementById('dataTableBody');
     const recordCountSpan = document.getElementById('recordCount');
 
     let mealData = [];
     let employeeMap = new Map();
-    const HEADERS = ['Tên nhân viên', 'Mã nhân viên', 'Ngày ăn', 'Phòng Ban'];
-
+    let currentExportType = '';
+    const HEADERS = ['Tên nhân viên', 'Mã nhân viên', 'Thứ', 'Ngày ăn', 'Phòng Ban'];
+    
     // Set default date for mealDateInput to today
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -177,17 +183,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const dd = String(today.getDate()).padStart(2, '0');
     mealDateInput.value = `${yyyy}-${mm}-${dd}`;
 
-
     function showToast(message, isError = false) {
         const toast = document.getElementById('toast');
         const toastMessage = document.getElementById('toast-message');
-        
         toastMessage.textContent = message;
         toast.className = `fixed bottom-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg transition-transform duration-300 ${isError ? 'bg-red-500' : 'bg-green-500'}`;
-        
         toast.classList.remove('translate-x-[200%]');
         toast.classList.add('translate-x-0');
-
         setTimeout(() => {
             toast.classList.remove('translate-x-0');
             toast.classList.add('translate-x-[200%]');
@@ -197,33 +199,31 @@ document.addEventListener('DOMContentLoaded', function () {
     function processData(dataRows) {
         let headerRowIndex = -1;
         let headers = [];
-
-        // Find the header row by looking for 'Mã nhân viên'
         for (let i = 0; i < dataRows.length && i < 10; i++) {
             if (dataRows[i].includes('Mã nhân viên')) {
                 headerRowIndex = i;
-                headers = dataRows[i];
+                headers = dataRows[i].map(h => String(h || '').trim());
                 break;
             }
         }
 
         if (headerRowIndex === -1) {
-            showToast('Không tìm thấy dòng tiêu đề trong file. Vui lòng kiểm tra lại file.', true);
+            showToast('Không tìm thấy dòng tiêu đề trong file.', true);
             return;
         }
 
-        // Find the index of each required column based on its header name
         const columnIndexMap = {
             name: headers.indexOf('Tên nhân viên'),
             id: headers.indexOf('Mã nhân viên'),
             date: headers.indexOf('Ngày ăn'),
-            department: headers.indexOf('Phòng Ban')
+            department: headers.indexOf('Phòng Ban'),
+            dayOfWeek: headers.indexOf('Thứ')
         };
         
-        // Check if any required column is missing
-        for (const key in columnIndexMap) {
+        const requiredColumns = ['name', 'id', 'date', 'department'];
+        for (const key of requiredColumns) {
             if (columnIndexMap[key] === -1) {
-                showToast(`Không tìm thấy cột "${headers[key]}" trong file.`, true);
+                showToast(`Lỗi: Không tìm thấy cột "${HEADERS[requiredColumns.indexOf(key)]}" trong file.`, true);
                 return;
             }
         }
@@ -238,9 +238,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Tên nhân viên': String(row[columnIndexMap.name] || '').trim(),
                 'Mã nhân viên': String(employeeId).trim(),
                 'Ngày ăn': String(row[columnIndexMap.date] || '').trim(),
-                'Phòng Ban': String(row[columnIndexMap.department] || '').trim()
+                'Phòng Ban': String(row[columnIndexMap.department] || '').trim(),
+                'Thứ': columnIndexMap.dayOfWeek !== -1 ? String(row[columnIndexMap.dayOfWeek] || '').trim() : ''
             };
-        }).filter(row => row && row['Mã nhân viên']);
+        }).filter(row => row && row['Mã nhân viên'] && row['Ngày ăn']);
 
         buildEmployeeMap();
         renderTable();
@@ -253,35 +254,22 @@ document.addEventListener('DOMContentLoaded', function () {
     dataFileInput.addEventListener('change', event => {
         const file = event.target.files[0];
         if (!file) return;
-
         showToast('Đang xử lý file...');
-        const fileName = file.name.toLowerCase();
-
-        if (fileName.endsWith('.csv')) {
-            Papa.parse(file, {
-                encoding: "UTF-8",
-                complete: results => processData(results.data),
-                error: error => showToast('Lỗi khi đọc file CSV: ' + error.message, true)
-            });
-        } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval:""});
-                    processData(jsonRows);
-                } catch (error) {
-                     showToast('Lỗi khi đọc file Excel: ' + error.message, true);
-                }
-            };
-            reader.onerror = error => showToast('Lỗi FileReader: ' + error.message, true);
-            reader.readAsArrayBuffer(file);
-        } else {
-            showToast('Định dạng file không được hỗ trợ.', true);
-        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array', cellDates:true});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonRows = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval:"", raw: false});
+                processData(jsonRows);
+            } catch (error) {
+                 showToast('Lỗi khi đọc file Excel: ' + error.message, true);
+            }
+        };
+        reader.onerror = error => showToast('Lỗi FileReader: ' + error.message, true);
+        reader.readAsArrayBuffer(file);
     });
 
     function buildEmployeeMap() {
@@ -296,11 +284,16 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+    
+    function getVietnameseDayOfWeek(date) {
+        const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+        return days[date.getDay()];
+    }
 
     function renderTable() {
         dataTableBody.innerHTML = '';
         if(mealData.length === 0) {
-             dataTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-gray-500">Không có dữ liệu.</td></tr>';
+             dataTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-10 text-gray-500">Không có dữ liệu.</td></tr>';
              recordCountSpan.textContent = 0;
              return;
         }
@@ -312,6 +305,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.innerHTML = `
                 <td class="px-4 py-2 font-medium text-white whitespace-nowrap">${row['Tên nhân viên']}</td>
                 <td class="px-4 py-2">${row['Mã nhân viên']}</td>
+                <td class="px-4 py-2">${row['Thứ']}</td>
                 <td class="px-4 py-2">${row['Ngày ăn']}</td>
                 <td class="px-4 py-2">${row['Phòng Ban']}</td>
             `;
@@ -327,31 +321,27 @@ document.addEventListener('DOMContentLoaded', function () {
             showToast('Vui lòng nhập Mã nhân viên.', true);
             return;
         }
-
         if (!employeeMap.has(id)) {
             showToast(`Không tìm thấy nhân viên với mã ${id}.`, true);
             return;
         }
-
-        const mealDateValue = mealDateInput.value; // Format: YYYY-MM-DD
+        const mealDateValue = mealDateInput.value;
         if (!mealDateValue) {
             showToast('Vui lòng chọn ngày ăn.', true);
             return;
         }
-        
-        // Convert YYYY-MM-DD string directly to M/D/YYYY to avoid timezone issues
         const [year, month, day] = mealDateValue.split('-');
         const formattedDate = `${parseInt(month)}/${parseInt(day)}/${year}`;
+        const dateObj = new Date(mealDateValue);
 
         const employeeInfo = employeeMap.get(id);
-        
         const newEntry = {
             'Tên nhân viên': employeeInfo.name,
             'Mã nhân viên': id,
             'Ngày ăn': formattedDate,
             'Phòng Ban': employeeInfo.department,
+            'Thứ': getVietnameseDayOfWeek(dateObj)
         };
-        
         mealData.push(newEntry);
         renderTable();
         employeeIdInput.value = '';
@@ -362,15 +352,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
     exportButton.addEventListener('click', () => {
         if (mealData.length === 0) {
-            showToast('Không có dữ liệu để xuất.', true);
-            return;
+            showToast('Không có dữ liệu để xuất.', true); return;
         }
         showToast('Đang chuẩn bị file Excel...');
-        const worksheet = XLSX.utils.json_to_sheet(mealData, {header: HEADERS});
+        const dataToExport = mealData.map(row => ({
+            'Tên nhân viên': row['Tên nhân viên'],
+            'Mã nhân viên': row['Mã nhân viên'],
+            'Thứ': row['Thứ'],
+            'Ngày ăn': row['Ngày ăn'],
+            'Phòng Ban': row['Phòng Ban']
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "DanhSachChamAn");
         XLSX.writeFile(workbook, `ToanBoChamCong_${new Date().toISOString().slice(0,10)}.xlsx`);
     });
+
+    function getStartAndEndDateOfWeek(year, week) {
+        const d = new Date(year, 0, 1 + (week - 1) * 7);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(d.setDate(diff));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const format = (dt) => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
+        return `${format(monday)} - ${format(sunday)}`;
+    }
 
     function renderStatsTable(containerId, data, headers) {
         const container = document.getElementById(containerId);
@@ -378,48 +385,47 @@ document.addEventListener('DOMContentLoaded', function () {
             container.innerHTML = '<p class="text-gray-500">Không có dữ liệu.</p>';
             return;
         }
-        let tableHTML = `<table class="w-full text-sm text-left text-gray-300">
-            <thead class="text-xs text-gray-400 uppercase bg-gray-700">
-                <tr><th class="px-4 py-2">${headers[0]}</th><th class="px-4 py-2">${headers[1]}</th></tr>
-            </thead><tbody>`;
-        
+        let tableHTML = `<table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2">${headers[0]}</th><th class="px-4 py-2">${headers[1]}</th></tr></thead><tbody>`;
         const sortedKeys = Object.keys(data).sort((a, b) => a > b ? -1 : 1);
 
         for(const key of sortedKeys) {
-            tableHTML += `<tr class="border-b border-gray-700">
-                <td class="px-4 py-2">${key}</td>
-                <td class="px-4 py-2 font-bold">${data[key]}</td>
-            </tr>`;
+            let displayKey = key;
+            if (containerId === 'weeklyStats') {
+                const [year, weekNum] = key.split('-W');
+                const dateRange = getStartAndEndDateOfWeek(parseInt(year), parseInt(weekNum));
+                displayKey = `${year}-Tuần ${parseInt(weekNum)} (${dateRange})`;
+            }
+            tableHTML += `<tr class="border-b border-gray-700"><td class="px-4 py-2">${displayKey}</td><td class="px-4 py-2 font-bold">${data[key]}</td></tr>`;
         }
         tableHTML += '</tbody></table>';
         container.innerHTML = tableHTML;
     }
-
+    
     function getWeekNumber(d) {
         d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
         var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
         var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
-        return `${d.getUTCFullYear()}-W${weekNo.toString().padStart(2, '0')}`;
+        return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+    }
+
+    function parseDate(dateStr) {
+        if (!dateStr || typeof dateStr !== 'string') return null;
+        const parts = dateStr.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+        if (!parts) return null;
+        // Assuming M/D/YYYY
+        const dateObj = new Date(parts[3], parts[1] - 1, parts[2]);
+        return isNaN(dateObj.getTime()) ? null : dateObj;
     }
 
     function calculateStats(data) {
         const dailyStats = {};
         const weeklyStats = {};
-
         data.forEach(row => {
-            const dateStr = row['Ngày ăn'];
-            if (!dateStr || typeof dateStr !== 'string') return;
-            
-            const dateParts = dateStr.split('/');
-            if (dateParts.length !== 3) return;
-
-            const dateObj = new Date(dateParts[2], dateParts[0] - 1, dateParts[1]);
-            if (isNaN(dateObj.getTime())) return;
-
+            const dateObj = parseDate(row['Ngày ăn']);
+            if (!dateObj) return;
             const formattedDate = dateObj.toISOString().slice(0, 10);
             dailyStats[formattedDate] = (dailyStats[formattedDate] || 0) + 1;
-            
             const weekNumber = getWeekNumber(dateObj);
             weeklyStats[weekNumber] = (weeklyStats[weekNumber] || 0) + 1;
         });
@@ -429,7 +435,7 @@ document.addEventListener('DOMContentLoaded', function () {
     showStatsButton.addEventListener('click', () => {
         const { dailyStats, weeklyStats } = calculateStats(mealData);
         renderStatsTable('dailyStats', dailyStats, ['Ngày', 'Số Suất']);
-        renderStatsTable('weeklyStats', weeklyStats, ['Tuần', 'Số Suất']);
+        renderStatsTable('weeklyStats', weeklyStats, ['Tuần', 'Phạm vi']);
         dataView.classList.add('hidden');
         statsView.classList.remove('hidden');
     });
@@ -438,34 +444,33 @@ document.addEventListener('DOMContentLoaded', function () {
         statsView.classList.add('hidden');
         dataView.classList.remove('hidden');
     });
-
-    // --- New Export Logic ---
-    exportStatsButton.addEventListener('click', () => {
+    
+    function openExportModal(type) {
+        currentExportType = type;
+        if (type === 'excel') {
+            modalTitle.textContent = 'Xuất Thống Kê (Excel)';
+            modalDescription.textContent = 'Thống kê theo ngày và tuần của tháng đã chọn sẽ được xuất ra file Excel.';
+        } else if (type === 'docx') {
+            modalTitle.textContent = 'Xuất Báo Cáo (Word)';
+            modalDescription.textContent = 'Báo cáo tổng hợp suất ăn theo ngày của tháng đã chọn sẽ được xuất ra file Word theo mẫu.';
+        }
         monthExportModal.classList.remove('hidden');
-    });
+    }
 
-    cancelExport.addEventListener('click', () => {
-        monthExportModal.classList.add('hidden');
-    });
+    exportStatsButton.addEventListener('click', () => openExportModal('excel'));
+    exportDocxButton.addEventListener('click', () => openExportModal('docx'));
+    cancelExport.addEventListener('click', () => monthExportModal.classList.add('hidden'));
 
     confirmExport.addEventListener('click', () => {
-        const monthValue = monthInput.value; // e.g., "2025-09"
+        const monthValue = monthInput.value;
         if (!monthValue) {
             showToast('Vui lòng chọn tháng để xuất file.', true);
             return;
         }
-
         const [year, month] = monthValue.split('-').map(Number);
-
         const filteredData = mealData.filter(row => {
-            const dateStr = row['Ngày ăn'];
-            if (!dateStr || typeof dateStr !== 'string') return false;
-            const dateParts = dateStr.split('/');
-            if (dateParts.length !== 3) return false;
-            
-            const rowYear = parseInt(dateParts[2]);
-            const rowMonth = parseInt(dateParts[0]);
-            return rowYear === year && rowMonth === month;
+            const dateObj = parseDate(row['Ngày ăn']);
+            return dateObj && dateObj.getFullYear() === year && dateObj.getMonth() + 1 === month;
         });
 
         if (filteredData.length === 0) {
@@ -473,31 +478,149 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const { dailyStats, weeklyStats } = calculateStats(filteredData);
-        
-        const dailyDataForSheet = Object.entries(dailyStats)
-            .sort((a,b) => a[0] > b[0] ? -1 : 1)
-            .map(([date, count]) => ({ 'Ngày': date, 'Số Suất': count }));
-            
-        const weeklyDataForSheet = Object.entries(weeklyStats)
-            .sort((a,b) => a[0] > b[0] ? -1 : 1)
-            .map(([week, count]) => ({ 'Tuần': week, 'Số Suất': count }));
+        if (currentExportType === 'excel') {
+            exportStatsToExcel(filteredData, year, month);
+        } else if (currentExportType === 'docx') {
+            exportStatsToDocx(filteredData, year, month);
+        }
+        monthExportModal.classList.add('hidden');
+    });
 
+    function exportStatsToExcel(filteredData, year, month) {
+        const { dailyStats, weeklyStats } = calculateStats(filteredData);
+        const dailyDataForSheet = Object.entries(dailyStats).sort((a,b) => a[0] > b[0] ? -1 : 1).map(([date, count]) => ({ 'Ngày': date, 'Số Suất': count }));
+        const weeklyDataForSheet = Object.entries(weeklyStats).sort((a,b) => a[0] > b[0] ? -1 : 1).map(([week, count]) => ({ 'Tuần': week, 'Số Suất': count }));
         const wb = XLSX.utils.book_new();
         const wsDaily = XLSX.utils.json_to_sheet(dailyDataForSheet);
         const wsWeekly = XLSX.utils.json_to_sheet(weeklyDataForSheet);
-
         XLSX.utils.book_append_sheet(wb, wsDaily, 'ThongKeTheoNgay');
         XLSX.utils.book_append_sheet(wb, wsWeekly, 'ThongKeTheoTuan');
-
         XLSX.writeFile(wb, `ThongKe_Thang_${month}-${year}.xlsx`);
+        showToast('Đã xuất file thống kê Excel!', false);
+    }
+    
+    function exportStatsToDocx(filteredData, year, month) {
+        if (typeof window.docx === 'undefined' || !window.docx) {
+            showToast('Lỗi: Thư viện xuất Word chưa sẵn sàng. Vui lòng kiểm tra mạng và thử lại.', true);
+            return;
+        }
+        const { Document, Packer, Paragraph, Table, TableCell, TableRow, AlignmentType, WidthType, TableBorders } = window.docx;
 
-        monthExportModal.classList.add('hidden');
-        showToast('Đã xuất file thống kê thành công!', false);
-    });
+        const { dailyStats } = calculateStats(filteredData);
+        
+        const sortedDays = Object.keys(dailyStats).sort();
+        const firstDay = sortedDays[0];
+        const lastDay = sortedDays[sortedDays.length - 1];
 
+        const formatDateVN = (dateStr) => {
+            const [y, m, d] = dateStr.split('-');
+            return `${d}/${m}/${y}`;
+        };
+        
+        const tableRows = sortedDays.map((dateStr, index) => {
+            const dateObj = new Date(dateStr);
+            const utcDate = new Date(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate());
+            return new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph({ text: `${index + 1}`, alignment: AlignmentType.CENTER })] }),
+                    new TableCell({ children: [new Paragraph(getVietnameseDayOfWeek(utcDate))] }),
+                    new TableCell({ children: [new Paragraph(formatDateVN(dateStr))] }),
+                    new TableCell({ children: [new Paragraph({ text: `${dailyStats[dateStr]}`, alignment: AlignmentType.CENTER })] }),
+                ],
+            });
+        });
+        
+        const totalMeals = Object.values(dailyStats).reduce((sum, count) => sum + count, 0);
+        tableRows.push(new TableRow({
+            children: [
+                new TableCell({
+                    columnSpan: 3,
+                    children: [new Paragraph({ text: "Tổng cộng", style: "strong" })],
+                }),
+                new TableCell({
+                    children: [new Paragraph({ text: `${totalMeals}`, alignment: AlignmentType.CENTER, style: "strong" })],
+                }),
+            ],
+        }));
+
+        const doc = new Document({
+            styles: {
+                paragraphStyles: [{
+                    id: "strong",
+                    name: "Strong",
+                    basedOn: "Normal",
+                    next: "Normal",
+                    run: { bold: true, font: "Times New Roman", size: 26 }, // 13pt = 26 half-points
+                }],
+            },
+            sections: [{
+                children: [
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        columnWidths: [45, 55],
+                        borders: TableBorders.NONE,
+                        rows: [
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({ text: "HỌC VIỆN CẢNH SÁT NHÂN DÂN", alignment: AlignmentType.CENTER, style: "strong" }),
+                                            new Paragraph({ text: "VĂN PHÒNG HỌC VIỆN", alignment: AlignmentType.CENTER, style: "strong" }),
+                                        ],
+                                    }),
+                                    new TableCell({
+                                        children: [
+                                            new Paragraph({ text: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", alignment: AlignmentType.CENTER, style: "strong" }),
+                                            new Paragraph({ text: "Độc lập - Tự do - Hạnh phúc", alignment: AlignmentType.CENTER, style: "strong" }),
+                                        ],
+                                    }),
+                                ],
+                            }),
+                        ],
+                    }),
+                    new Paragraph({ text: "" }),
+                    new Paragraph({ text: "PHIẾU XÁC NHẬN", alignment: AlignmentType.CENTER, style: "strong" }),
+                    new Paragraph({ text: "Về việc trích xuất dữ liệu hệ thống quản lý phiếu ăn", alignment: AlignmentType.CENTER, run: { font: "Times New Roman", size: 26 } }),
+                    new Paragraph({ text: "bằng vân tay cho cán bộ, giáo viên", alignment: AlignmentType.CENTER, run: { font: "Times New Roman", size: 26 } }),
+                    new Paragraph({ text: "" }),
+                    new Paragraph({ text: `Bảng tổng hợp số lượng suất ăn hàng ngày từ ${formatDateVN(firstDay)} đến ${formatDateVN(lastDay)}:`, run: { font: "Times New Roman", size: 26 } }),
+                    new Paragraph({ text: "" }),
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        rows: [
+                             new TableRow({
+                                children: [
+                                    new TableCell({ children: [new Paragraph({ text: "STT", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                    new TableCell({ children: [new Paragraph({ text: "Thứ", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                    new TableCell({ children: [new Paragraph({ text: "Ngày tháng", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                    new TableCell({ children: [new Paragraph({ text: "Số lượng suất ăn", style: "strong", alignment: AlignmentType.CENTER })] }),
+                                ],
+                            }),
+                            ...tableRows
+                        ],
+                    }),
+                     new Paragraph({ text: "" }),
+                     new Paragraph({ text: `Hà Nội, ngày ${dd} tháng ${mm} năm ${yyyy}`, alignment: AlignmentType.END, run: { font: "Times New Roman", size: 26, italics: true } }),
+                     new Paragraph({ text: "CÁN BỘ THỰC HIỆN", alignment: AlignmentType.END, style: "strong" }),
+                ],
+            }],
+        });
+
+        Packer.toBlob(doc).then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `PhieuXacNhan_Thang_${month}-${year}.docx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        });
+        showToast('Đã xuất file báo cáo Word!', false);
+    }
 });
 </script>
 
 </body>
 </html>
+
